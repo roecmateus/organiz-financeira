@@ -96,6 +96,9 @@ body{background:var(--g-bg);color:var(--text);font-size:14px;max-width:420px;mar
 .sub-name{font-size:13px;font-weight:500}
 .sub-val-txt{font-size:11px;color:var(--text-muted)}
 .sub-del{background:none;border:none;cursor:pointer;color:#c0392b;font-size:22px;padding:6px 8px;border-radius:8px;line-height:1}
+.txn-del{background:none;border:none;cursor:pointer;color:#c0392b;font-size:18px;padding:4px 6px;border-radius:8px;line-height:1;opacity:0;transition:.15s;flex-shrink:0}
+.txn:hover .txn-del{opacity:1}
+@media(hover:none){.txn-del{opacity:1}}
 .subs-total{font-size:12px;color:var(--text-muted);margin-top:.6rem;text-align:right}
 .subs-note{font-size:11px;color:#3d8c62;margin-top:3px;text-align:right}
 .eco-card{background:linear-gradient(135deg,#e8f4fd,#d6eaf8);border:0.5px solid #aed6f1;border-radius:12px;padding:.9rem 1rem;display:flex;align-items:center;gap:10px;margin-top:.5rem}
@@ -598,9 +601,21 @@ function renderTxnList(id,txns){
   txns.forEach(t=>{
     const cat=t.type==='save'?CATS.find(c=>c.name==='Economia'):CATS.find(c=>c.name===t.category)||CATS[CATS.length-1];
     const prefix=t.type==='out'?'−':t.type==='save'?'🏦 ':'+';
+    // índice real no array global
+    const realIdx=transactions.indexOf(t);
     const d=document.createElement('div');d.className='txn';
-    d.innerHTML=`<div class="txn-icon">${cat.icon}</div><div class="txn-info"><div class="txn-name">${t.name}</div><div class="txn-sub">${t.type==='save'?'Economia':t.category} · ${new Date(t.date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</div></div><div class="txn-amt ${t.type}">${prefix}${fmt(t.amount)}</div>`;
+    d.innerHTML=`<div class="txn-icon">${cat.icon}</div><div class="txn-info"><div class="txn-name">${t.name}</div><div class="txn-sub">${t.type==='save'?'Economia':t.category} · ${new Date(t.date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</div></div><div class="txn-amt ${t.type}">${prefix}${fmt(t.amount)}</div><button class="txn-del" data-i="${realIdx}" title="Excluir">×</button>`;
     el.appendChild(d);
+  });
+  el.querySelectorAll('.txn-del').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const i=parseInt(btn.dataset.i);
+      if(confirm(`Excluir "${transactions[i]?.name}"?`)){
+        transactions.splice(i,1);
+        await saveToFirebase();
+        render();
+      }
+    });
   });
 }
 
