@@ -792,14 +792,16 @@ function renderInst(){
     const advBtn=remaining>0?`<button class="inst-advance-btn" data-i="${i}">+Adiantar</button>`:'';
     // contar adiantamentos feitos neste mês para este item
     const keyNow=`${curYear}-${curMonth}`;
-    let advCount=0, advTotal=0;
+    let advCount=0;
     if(inst.paidMonths){
       Object.entries(inst.paidMonths).forEach(([k,v])=>{
-        if(k.startsWith('adv-')&&v===keyNow){advCount++;advTotal+=inst.value;}
+        if(k.startsWith('adv-')&&v===keyNow) advCount++;
       });
     }
-    const advInfo=advCount>0?`<div style="font-size:11px;color:#8e5cc4;margin-top:2px">+ ${advCount} parcela${advCount>1?'s':''} adiantada${advCount>1?'s':''}</div>`:'';
-    const advAmt=advCount>0?`<div style="font-size:11px;color:#8e5cc4;margin-top:2px">+${fmt(advTotal)} adiantada${advCount>1?'s':''}</div>`:'';
+    // se tem adiantamento: parcela exibida = atual + adiantadas, valor = total
+    const displayParcel=advCount>0?parcelNum+advCount:parcelNum;
+    const displayValue=advCount>0?inst.value*(advCount+1):inst.value;
+    const advNote=advCount>0?`<div style="font-size:11px;color:#8e5cc4;margin-top:2px">*+${advCount} adiantada${advCount>1?'s':''}</div>`:'';
     const d=document.createElement('div');
     d.className='inst-item';
     d.innerHTML=`
@@ -808,12 +810,11 @@ function renderInst(){
       </div>
       <div class="inst-info">
         <div class="inst-name">💳 ${inst.name}</div>
-        <div class="inst-sub" style="color:${isPaid?'#3d8c62':'var(--text-muted)'}">parcela ${parcelNum}/${inst.total}</div>
-        ${advInfo}
+        <div class="inst-sub" style="color:${isPaid?'#3d8c62':'var(--text-muted)'}">parcela ${displayParcel}/${inst.total}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end">
-        <div class="inst-amt ${isPaid?'paid-amt':'pending-amt'}">${fmt(inst.value)}</div>
-        ${advAmt}
+        <div class="inst-amt ${isPaid?'paid-amt':'pending-amt'}">${fmt(displayValue)}</div>
+        ${advNote}
       </div>
       ${advBtn}
       <button class="inst-del" data-i="${i}">×</button>`;
