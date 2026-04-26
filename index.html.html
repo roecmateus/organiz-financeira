@@ -101,6 +101,19 @@ body{background:var(--g-bg);color:var(--text);font-size:14px;max-width:420px;mar
 @media(hover:none){.txn-del{opacity:1}}
 .subs-total{font-size:12px;color:var(--text-muted);margin-top:.6rem;text-align:right}
 .subs-note{font-size:11px;color:#3d8c62;margin-top:3px;text-align:right}
+/* parcelas */
+.inst-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:0.5px solid var(--border)}
+.inst-item:last-child{border-bottom:none}
+.inst-check{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--border);background:var(--pill-bg);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:13px;transition:.15s;touch-action:manipulation}
+.inst-check.paid{background:#3d8c62;border-color:#3d8c62;color:#fff}
+.inst-info{flex:1;min-width:0}
+.inst-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inst-sub{font-size:11px;color:var(--text-muted)}
+.inst-amt{font-size:13px;font-weight:500;white-space:nowrap}
+.inst-amt.paid-amt{color:#3d8c62}
+.inst-amt.pending-amt{color:var(--text-muted)}
+.inst-del{background:none;border:none;cursor:pointer;color:#c0392b;font-size:18px;padding:4px 6px;border-radius:8px;line-height:1;flex-shrink:0}
+.inst-adv{font-size:10px;color:#8e5cc4;background:#f3eeff;border-radius:6px;padding:2px 6px;font-weight:500}
 .eco-card{background:linear-gradient(135deg,#e8f4fd,#d6eaf8);border:0.5px solid #aed6f1;border-radius:12px;padding:.9rem 1rem;display:flex;align-items:center;gap:10px;margin-top:.5rem}
 .eco-icon{font-size:22px}
 .eco-info{flex:1}
@@ -207,6 +220,7 @@ body{background:var(--g-bg);color:var(--text);font-size:14px;max-width:420px;mar
     <div class="tabs">
       <button class="active" id="tab-dashboard">Início</button>
       <button id="tab-gastos">Gastos</button>
+      <button id="tab-parcelas">Parcelas</button>
       <button id="tab-contas">Contas</button>
     </div>
   </div>
@@ -266,6 +280,19 @@ body{background:var(--g-bg);color:var(--text);font-size:14px;max-width:420px;mar
       <div class="card">
         <div class="card-title">Todas as transações</div>
         <div class="txn-list" id="txn-all"></div>
+      </div>
+    </div>
+
+    <div id="page-parcelas" class="page">
+      <div style="display:flex;flex-direction:column;gap:.8rem">
+        <div class="card">
+          <div class="card-title">
+            <span>Parcelas do mês</span>
+            <span class="link-btn" id="btn-add-inst">+ adicionar</span>
+          </div>
+          <div id="inst-list"></div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:.6rem;text-align:right" id="inst-summary"></div>
+        </div>
       </div>
     </div>
 
@@ -387,6 +414,7 @@ const CATS=[
   {name:'Moradia',color:'#d4882a',icon:'🏠'},
   {name:'Compras',color:'#e0619e',icon:'🛍️'},
   {name:'Assinaturas',color:'#0e7fa8',icon:'📡'},
+  {name:'Parcelas',color:'#7d3c98',icon:'💳'},
   {name:'Economia',color:'#1a5276',icon:'🏦',isSaving:true},
   {name:'Outros',color:'#7a8c84',icon:'📦'},
 ];
@@ -394,7 +422,7 @@ const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Ago
 const ICON_OPTIONS=['🎵','📺','🤖','🎮','☁️','📰','🏋️','📱','🛡️','🎬','🎧','📚','🍿','🧠','💼','🌐'];
 
 let curMonth=new Date().getMonth(), curYear=new Date().getFullYear();
-let budget=3000, transactions=[], subscriptions=[], selectedIcon='🎵', selectedType='out';
+let budget=3000, transactions=[], subscriptions=[], installments=[], selectedIcon='🎵', selectedType='out';
 let currentUser=null;
 
 // ---- UTILS ----
@@ -415,6 +443,7 @@ async function loadFromFirebase(){
       const d=snap.data();
       transactions=d.transactions||[];
       subscriptions=d.subscriptions||[];
+      installments=d.installments||[];
       budget=d.budget||3000;
     }
   }catch(e){console.error(e);}
@@ -423,7 +452,7 @@ async function loadFromFirebase(){
 async function saveToFirebase(){
   if(!currentUser)return;
   try{
-    await setDoc(doc(db,'users',currentUser.uid),{transactions,subscriptions,budget},{merge:true});
+    await setDoc(doc(db,'users',currentUser.uid),{transactions,subscriptions,installments,budget},{merge:true});
   }catch(e){console.error(e);}
 }
 
@@ -507,12 +536,13 @@ function render(){
   const txnOuts=filtered.filter(t=>t.type==='out').reduce((a,t)=>a+t.amount,0);
   const txnSave=filtered.filter(t=>t.type==='save').reduce((a,t)=>a+t.amount,0);
   const subsTotal=getSubsTotal();
-  const totalCommitted=txnOuts+subsTotal+txnSave;
+  const instTotal=getInstTotal();
+  const totalCommitted=txnOuts+subsTotal+txnSave+instTotal;
   const pct=budget>0?Math.min(100,Math.round(totalCommitted/budget*100)):0;
   const color=pct>90?'#c0392b':pct>70?'#d4882a':'#3d8c62';
 
   document.getElementById('month-label').textContent=MONTHS[curMonth]+' '+curYear;
-  document.getElementById('spent-val').textContent=fmtShort(txnOuts+subsTotal);
+  document.getElementById('spent-val').textContent=fmtShort(txnOuts+subsTotal+instTotal);
   document.getElementById('budget-val').textContent=fmtShort(budget);
   const outCount=filtered.filter(t=>t.type==='out').length;
   document.getElementById('txn-count').textContent=outCount+' transaç'+(outCount===1?'ão':'ões');
@@ -526,18 +556,20 @@ function render(){
   document.getElementById('donut-center-val').textContent=fmtShort(totalCommitted);
   document.getElementById('donut-center-label').textContent='comprometido';
 
-  renderDonut(filtered,totalCommitted,subsTotal);
+  renderDonut(filtered,totalCommitted,subsTotal,instTotal);
   renderTxnList('txn-preview',[...filtered].reverse().slice(0,5));
   renderTxnList('txn-all',[...filtered].reverse());
-  renderContas(filtered,subsTotal);
+  renderContas(filtered,subsTotal,instTotal);
+  renderInst();
   renderSubs();
 }
 
-function renderDonut(filtered,total,subsTotal){
+function renderDonut(filtered,total,subsTotal,instTotal=0){
   const catMap={};CATS.forEach(c=>catMap[c.name]=0);
   filtered.filter(t=>t.type==='out').forEach(t=>{catMap[t.category]!==undefined?catMap[t.category]+=t.amount:catMap['Outros']+=t.amount;});
   filtered.filter(t=>t.type==='save').forEach(t=>{catMap['Economia']+=t.amount;});
   catMap['Assinaturas']+=subsTotal;
+  catMap['Parcelas']=(catMap['Parcelas']||0)+instTotal;
   const entries=CATS.filter(c=>catMap[c.name]>0).map(c=>({...c,val:catMap[c.name],pct:total>0?catMap[c.name]/total:0}));
   const svg=document.getElementById('donut-svg');svg.innerHTML='';
   const cx=100,cy=100,R=88,ri=62,tau=Math.PI*2;
@@ -619,9 +651,9 @@ function renderTxnList(id,txns){
   });
 }
 
-function renderContas(filtered,subsTotal){
+function renderContas(filtered,subsTotal,instTotal=0){
   const ins=filtered.filter(t=>t.type==='in').reduce((a,t)=>a+t.amount,0);
-  const outs=filtered.filter(t=>t.type==='out').reduce((a,t)=>a+t.amount,0)+subsTotal;
+  const outs=filtered.filter(t=>t.type==='out').reduce((a,t)=>a+t.amount,0)+subsTotal+instTotal;
   const saved=filtered.filter(t=>t.type==='save').reduce((a,t)=>a+t.amount,0);
   const saldo=ins-outs-saved;
   document.getElementById('balances').innerHTML=`
@@ -631,6 +663,113 @@ function renderContas(filtered,subsTotal){
   const ecoCard=document.getElementById('eco-card');
   if(saved>0){document.getElementById('eco-val').textContent=fmt(saved);ecoCard.style.display='flex';}
   else ecoCard.style.display='none';
+}
+
+function getInstTotal(){
+  // soma parcelas marcadas como pagas no mês/ano atual
+  return installments.reduce((total,inst)=>{
+    const key=`${curYear}-${curMonth}`;
+    if(inst.paidMonths && inst.paidMonths[key]) return total+inst.value;
+    return total;
+  },0);
+}
+
+function getInstCurrentParcel(inst){
+  // calcula qual parcela deve aparecer neste mês
+  // começa na parcela atual informada + meses avançados desde o cadastro
+  const cadastroMonth=inst.startMonth; // mês do cadastro (0-11)
+  const cadastroYear=inst.startYear;
+  const diffMonths=(curYear-cadastroYear)*12+(curMonth-cadastroMonth);
+  // quantas parcelas já foram pagas antes deste mês
+  let paidBefore=0;
+  for(let m=0;m<diffMonths;m++){
+    const d=new Date(cadastroYear,cadastroMonth+m,1);
+    const k=`${d.getFullYear()}-${d.getMonth()}`;
+    if(inst.paidMonths && inst.paidMonths[k]) paidBefore++;
+  }
+  return inst.currentParcel+paidBefore;
+}
+
+function renderInst(){
+  const el=document.getElementById('inst-list');
+  if(!el)return;
+  el.innerHTML='';
+  if(!installments.length){
+    el.innerHTML='<div class="empty">Nenhuma parcela cadastrada</div>';
+    document.getElementById('inst-summary').textContent='';
+    return;
+  }
+  const key=`${curYear}-${curMonth}`;
+  let paidCount=0, totalPaid=0, totalPending=0;
+
+  installments.forEach((inst,i)=>{
+    const parcelNum=getInstCurrentParcel(inst);
+    // se já passou da última parcela, não mostrar
+    if(parcelNum>inst.total) return;
+
+    const isPaid=inst.paidMonths && inst.paidMonths[key];
+    const isAdvanced=isPaid && inst.paidMonths[key]==='advanced';
+    if(isPaid){paidCount++;totalPaid+=inst.value;}
+    else totalPending+=inst.value;
+
+    const d=document.createElement('div');
+    d.className='inst-item';
+    d.innerHTML=`
+      <div class="inst-check ${isPaid?'paid':''}" data-i="${i}">
+        ${isPaid?'✓':''}
+      </div>
+      <div class="inst-info">
+        <div class="inst-name">💳 ${inst.name} ${isAdvanced?'<span class="inst-adv">adiantada</span>':''}</div>
+        <div class="inst-sub">parcela ${parcelNum}/${inst.total}</div>
+      </div>
+      <div class="inst-amt ${isPaid?'paid-amt':'pending-amt'}">${fmt(inst.value)}</div>
+      <button class="inst-del" data-i="${i}">×</button>`;
+    el.appendChild(d);
+  });
+
+  // checkboxes
+  el.querySelectorAll('.inst-check').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const i=parseInt(btn.dataset.i);
+      const inst=installments[i];
+      if(!inst.paidMonths)inst.paidMonths={};
+      const key2=`${curYear}-${curMonth}`;
+      if(inst.paidMonths[key2]){
+        delete inst.paidMonths[key2];
+      }else{
+        // verifica se é adiantamento (mês futuro em relação ao cadastro)
+        const parcelNum=getInstCurrentParcel(inst);
+        const isAdv=(curYear>inst.startYear)||(curYear===inst.startYear&&curMonth>inst.startMonth);
+        inst.paidMonths[key2]=isAdv?'advanced':'paid';
+        // se chegou na última parcela, remover após salvar
+        if(parcelNum>=inst.total){
+          await new Promise(r=>setTimeout(r,300));
+          installments.splice(i,1);
+          await saveToFirebase();render();return;
+        }
+      }
+      await saveToFirebase();render();
+    });
+  });
+
+  // botões excluir
+  el.querySelectorAll('.inst-del').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const i=parseInt(btn.dataset.i);
+      if(confirm(`Excluir parcelas de "${installments[i].name}"?`)){
+        installments.splice(i,1);
+        await saveToFirebase();render();
+      }
+    });
+  });
+
+  const summary=document.getElementById('inst-summary');
+  if(summary){
+    const parts=[];
+    if(paidCount>0) parts.push(`✅ ${fmt(totalPaid)} pago`);
+    if(totalPending>0) parts.push(`⏳ ${fmt(totalPending)} pendente`);
+    summary.textContent=parts.join(' · ');
+  }
 }
 
 function renderSubs(){
@@ -671,7 +810,7 @@ function setType(t){
 }
 
 function switchTab(tab){
-  ['dashboard','gastos','contas'].forEach(t=>{
+  ['dashboard','gastos','parcelas','contas'].forEach(t=>{
     document.getElementById('page-'+t).classList.toggle('active',t===tab);
     document.getElementById('tab-'+t).classList.toggle('active',t===tab);
   });
@@ -684,6 +823,7 @@ document.getElementById('tab-dashboard').addEventListener('click',()=>switchTab(
 document.getElementById('tab-gastos').addEventListener('click',()=>switchTab('gastos'));
 document.getElementById('tab-contas').addEventListener('click',()=>switchTab('contas'));
 document.getElementById('link-ver-todas').addEventListener('click',()=>switchTab('gastos'));
+document.getElementById('tab-parcelas').addEventListener('click',()=>switchTab('parcelas'));
 document.getElementById('type-out').addEventListener('click',()=>setType('out'));
 document.getElementById('type-in').addEventListener('click',()=>setType('in'));
 document.getElementById('type-save').addEventListener('click',()=>setType('save'));
@@ -732,6 +872,48 @@ document.getElementById('btn-save-sub').addEventListener('click',async()=>{
   subscriptions.push({name,value,icon});
   await saveToFirebase();render();document.getElementById('sub-modal').style.display='none';
 });
+
+// ---- PARCELAS ----
+document.getElementById('btn-add-inst').addEventListener('click',()=>{
+  document.getElementById('inst-name-input').value='';
+  document.getElementById('inst-value-input').value='';
+  document.getElementById('inst-total-input').value='';
+  document.getElementById('inst-current-input').value='';
+  document.getElementById('inst-modal').style.display='flex';
+});
+document.getElementById('btn-cancel-inst').addEventListener('click',()=>{document.getElementById('inst-modal').style.display='none';});
+document.getElementById('btn-save-inst').addEventListener('click',async()=>{
+  const name=document.getElementById('inst-name-input').value.trim();
+  const value=parseFloat(document.getElementById('inst-value-input').value);
+  const total=parseInt(document.getElementById('inst-total-input').value);
+  const current=parseInt(document.getElementById('inst-current-input').value);
+  if(!name||isNaN(value)||value<=0||isNaN(total)||total<1||isNaN(current)||current<1||current>total)return;
+  installments.push({
+    name, value, total,
+    currentParcel: current,
+    startMonth: curMonth,
+    startYear: curYear,
+    paidMonths: {}
+  });
+  await saveToFirebase();render();
+  document.getElementById('inst-modal').style.display='none';
+  switchTab('parcelas');
+});
 </script>
+<!-- Modal: nova parcela -->
+<div class="overlay overlay-center" id="inst-modal" style="display:none">
+  <div class="modal-center">
+    <h3 id="inst-modal-title">Nova parcela</h3>
+    <input type="text" id="inst-name-input" placeholder="Nome (ex: Geladeira)" autocomplete="off">
+    <input type="number" id="inst-value-input" placeholder="Valor de cada parcela (R$)" step="0.01" min="0" inputmode="decimal">
+    <input type="number" id="inst-total-input" placeholder="Total de parcelas (ex: 12)" min="1" max="360" inputmode="numeric">
+    <input type="number" id="inst-current-input" placeholder="Parcela atual (ex: 6)" min="1" inputmode="numeric">
+    <div class="modal-btns">
+      <button class="btn-cancel" id="btn-cancel-inst">Cancelar</button>
+      <button class="btn-save" id="btn-save-inst">Salvar</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
