@@ -722,11 +722,19 @@ function renderSavings(){
 }
 
 function getInstTotal(){
-  // soma parcelas marcadas como pagas no mês/ano atual
+  // soma parcela paga + adiantamentos feitos no mês atual
   return installments.reduce((total,inst)=>{
     const key=`${curYear}-${curMonth}`;
-    if(inst.paidMonths && inst.paidMonths[key]) return total+inst.value;
-    return total;
+    let sum=0;
+    // parcela do mês paga?
+    if(inst.paidMonths && inst.paidMonths[key]) sum+=inst.value;
+    // adiantamentos feitos neste mês
+    if(inst.paidMonths){
+      Object.entries(inst.paidMonths).forEach(([k,v])=>{
+        if(k.startsWith('adv-')&&v===`${curYear}-${curMonth}`) sum+=inst.value;
+      });
+    }
+    return total+sum;
   },0);
 }
 
@@ -782,6 +790,16 @@ function renderInst(){
 
     const remaining=inst.total-parcelNum;
     const advBtn=remaining>0?`<button class="inst-advance-btn" data-i="${i}">+Adiantar</button>`:'';
+    // contar adiantamentos feitos neste mês para este item
+    const keyNow=`${curYear}-${curMonth}`;
+    let advCount=0, advTotal=0;
+    if(inst.paidMonths){
+      Object.entries(inst.paidMonths).forEach(([k,v])=>{
+        if(k.startsWith('adv-')&&v===keyNow){advCount++;advTotal+=inst.value;}
+      });
+    }
+    const advInfo=advCount>0?`<div style="font-size:11px;color:#8e5cc4;margin-top:2px">+ ${advCount} parcela${advCount>1?'s':''} adiantada${advCount>1?'s':''}</div>`:'';
+    const advAmt=advCount>0?`<div style="font-size:11px;color:#8e5cc4;margin-top:2px">+${fmt(advTotal)} adiantada${advCount>1?'s':''}</div>`:'';
     const d=document.createElement('div');
     d.className='inst-item';
     d.innerHTML=`
@@ -789,10 +807,14 @@ function renderInst(){
         ${isPaid?'✓':''}
       </div>
       <div class="inst-info">
-        <div class="inst-name">💳 ${inst.name} ${isAdvanced?'<span class="inst-adv">adiantada</span>':''}</div>
-        <div class="inst-sub">parcela ${parcelNum}/${inst.total}</div>
+        <div class="inst-name">💳 ${inst.name}</div>
+        <div class="inst-sub" style="color:${isPaid?'#3d8c62':'var(--text-muted)'}">parcela ${parcelNum}/${inst.total}</div>
+        ${advInfo}
       </div>
-      <div class="inst-amt ${isPaid?'paid-amt':'pending-amt'}">${fmt(inst.value)}</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end">
+        <div class="inst-amt ${isPaid?'paid-amt':'pending-amt'}">${fmt(inst.value)}</div>
+        ${advAmt}
+      </div>
       ${advBtn}
       <button class="inst-del" data-i="${i}">×</button>`;
     el.appendChild(d);
@@ -833,15 +855,18 @@ function renderInst(){
       sel.innerHTML='';
       for(let q=1;q<=remaining;q++){
         const opt=document.createElement('option');
-        opt.value=q;opt.textContent=q===1?`1 parcela (${fmt(inst.value)})`:`${q} parcelas (${fmt(inst.value*q)})`;
+        const totalVal=inst.value*(q+1);
+        opt.value=q;opt.textContent=`+ ${q} adiantada${q>1?'s':''} · total ${fmt(totalVal)}`;
         sel.appendChild(opt);
       }
       document.getElementById('advance-modal-title').textContent=`Adiantar — ${inst.name}`;
       document.getElementById('advance-info').textContent=`Parcela atual: ${parcelN}/${inst.total} · Valor: ${fmt(inst.value)}`;
-      document.getElementById('advance-total-preview').textContent=`Total a ser lançado neste mês: ${fmt(inst.value)}`;
+      // preview inicial com 1 adiantada
+      document.getElementById('advance-total-preview').innerHTML=`<strong>Total neste mês:</strong> ${fmt(inst.value*2)} <span style="color:#8e5cc4;font-size:12px">parcela atual + 1 adiantada</span>`;
       sel.onchange=()=>{
         const q=parseInt(sel.value);
-        document.getElementById('advance-total-preview').textContent=`Total a ser lançado neste mês: ${fmt(inst.value*q)}`;
+        const totalVal=inst.value*(q+1);
+        document.getElementById('advance-total-preview').innerHTML=`<strong>Total neste mês:</strong> ${fmt(totalVal)} <span style="color:#8e5cc4;font-size:12px">parcela atual + ${q} adiantada${q>1?'s':''}</span>`;
       };
       document.getElementById('advance-modal').dataset.instIdx=i;
       document.getElementById('advance-modal').style.display='flex';
@@ -1002,19 +1027,19 @@ document.getElementById('btn-save-advance').addEventListener('click',async()=>{
   const i=parseInt(document.getElementById('advance-modal').dataset.instIdx);
   const inst=installments[i];
   const qty=parseInt(document.getElementById('advance-qty-input').value);
-  if(!inst||isNaN(qty)||qty<1)return;
+  if(!inst||isNaN(qty)||qty<0)return;
   if(!inst.paidMonths)inst.paidMonths={};
   const parcelN=getInstCurrentParcel(inst);
-  // marcar parcela atual como paga neste mês
   const key=`${curYear}-${curMonth}`;
+  // marcar parcela atual como paga
   inst.paidMonths[key]='paid';
-  // marcar adiantamentos (parcelas futuras pagas agora)
-  for(let q=1;q<qty;q++){
+  // marcar adiantamentos
+  for(let q=1;q<=qty;q++){
     const targetParcel=parcelN+q;
     inst.paidMonths[`adv-${targetParcel}`]=`${curYear}-${curMonth}`;
   }
   // verificar se quitou tudo
-  const newParcel=parcelN+qty-1;
+  const newParcel=parcelN+qty;
   if(newParcel>=inst.total){
     await saveToFirebase();render();
     document.getElementById('advance-modal').style.display='none';
