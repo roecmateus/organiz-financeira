@@ -795,6 +795,7 @@ function renderInst(){
       });
     }
     if(isPaid){
+      paidCount++;
       totalPaid+=inst.value*(advCountSummary+1); // parcela atual + adiantadas
     } else {
       totalPending+=inst.value;
