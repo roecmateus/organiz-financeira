@@ -277,7 +277,6 @@ body{background:var(--g-bg);color:var(--text);font-size:14px;max-width:420px;mar
         <div class="card">
           <div class="card-title">
             <span>Últimas transações</span>
-            <span class="link-btn" id="link-ver-todas">ver todas</span>
           </div>
           <div class="txn-list" id="txn-preview"></div>
         </div>
@@ -916,7 +915,7 @@ document.getElementById('btn-next').addEventListener('click',()=>{curMonth++;if(
 document.getElementById('tab-dashboard').addEventListener('click',()=>switchTab('dashboard'));
 document.getElementById('tab-gastos').addEventListener('click',()=>switchTab('gastos'));
 document.getElementById('tab-contas').addEventListener('click',()=>switchTab('contas'));
-document.getElementById('link-ver-todas').addEventListener('click',()=>switchTab('gastos'));
+
 document.getElementById('tab-parcelas').addEventListener('click',()=>switchTab('parcelas'));
 document.getElementById('type-out').addEventListener('click',()=>setType('out'));
 document.getElementById('type-in').addEventListener('click',()=>setType('in'));
