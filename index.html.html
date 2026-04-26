@@ -114,6 +114,14 @@ body{background:var(--g-bg);color:var(--text);font-size:14px;max-width:420px;mar
 .inst-amt.pending-amt{color:var(--text-muted)}
 .inst-del{background:none;border:none;cursor:pointer;color:#c0392b;font-size:18px;padding:4px 6px;border-radius:8px;line-height:1;flex-shrink:0}
 .inst-adv{font-size:10px;color:#8e5cc4;background:#f3eeff;border-radius:6px;padding:2px 6px;font-weight:500}
+.inst-advance-btn{background:none;border:0.5px solid #8e5cc4;color:#8e5cc4;border-radius:8px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap;touch-action:manipulation}
+.inst-advance-btn:hover{background:#f3eeff}
+.eco-rec-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:0.5px solid var(--border)}
+.eco-rec-item:last-child{border-bottom:none}
+.eco-rec-icon{width:34px;height:34px;border-radius:10px;background:#ebf5fb;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.eco-rec-info{flex:1;min-width:0}
+.eco-rec-name{font-size:13px;font-weight:500}
+.eco-rec-val{font-size:11px;color:var(--text-muted)}
 .eco-card{background:linear-gradient(135deg,#e8f4fd,#d6eaf8);border:0.5px solid #aed6f1;border-radius:12px;padding:.9rem 1rem;display:flex;align-items:center;gap:10px;margin-top:.5rem}
 .eco-icon{font-size:22px}
 .eco-info{flex:1}
@@ -312,6 +320,14 @@ body{background:var(--g-bg);color:var(--text);font-size:14px;max-width:420px;mar
         </div>
         <div class="card">
           <div class="card-title">
+            <span>Economias recorrentes</span>
+            <span class="link-btn" id="btn-add-saving">+ adicionar</span>
+          </div>
+          <div id="savings-list"></div>
+          <div style="font-size:11px;color:#3d8c62;margin-top:.4rem;text-align:right" id="savings-note"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">
             <span>Assinaturas ativas</span>
             <span class="link-btn" id="btn-add-sub">+ adicionar</span>
           </div>
@@ -422,7 +438,7 @@ const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Ago
 const ICON_OPTIONS=['🎵','📺','🤖','🎮','☁️','📰','🏋️','📱','🛡️','🎬','🎧','📚','🍿','🧠','💼','🌐'];
 
 let curMonth=new Date().getMonth(), curYear=new Date().getFullYear();
-let budget=3000, transactions=[], subscriptions=[], installments=[], selectedIcon='🎵', selectedType='out';
+let budget=3000, transactions=[], subscriptions=[], installments=[], savings=[], selectedIcon='🎵', selectedType='out';
 let currentUser=null;
 
 // ---- UTILS ----
@@ -444,6 +460,7 @@ async function loadFromFirebase(){
       transactions=d.transactions||[];
       subscriptions=d.subscriptions||[];
       installments=d.installments||[];
+      savings=d.savings||[];
       budget=d.budget||3000;
     }
   }catch(e){console.error(e);}
@@ -452,7 +469,7 @@ async function loadFromFirebase(){
 async function saveToFirebase(){
   if(!currentUser)return;
   try{
-    await setDoc(doc(db,'users',currentUser.uid),{transactions,subscriptions,installments,budget},{merge:true});
+    await setDoc(doc(db,'users',currentUser.uid),{transactions,subscriptions,installments,savings,budget},{merge:true});
   }catch(e){console.error(e);}
 }
 
@@ -537,12 +554,13 @@ function render(){
   const txnSave=filtered.filter(t=>t.type==='save').reduce((a,t)=>a+t.amount,0);
   const subsTotal=getSubsTotal();
   const instTotal=getInstTotal();
-  const totalCommitted=txnOuts+subsTotal+txnSave+instTotal;
+  const savingsTotal=getSavingsTotal();
+  const totalCommitted=txnOuts+subsTotal+txnSave+instTotal+savingsTotal;
   const pct=budget>0?Math.min(100,Math.round(totalCommitted/budget*100)):0;
   const color=pct>90?'#c0392b':pct>70?'#d4882a':'#3d8c62';
 
   document.getElementById('month-label').textContent=MONTHS[curMonth]+' '+curYear;
-  document.getElementById('spent-val').textContent=fmtShort(txnOuts+subsTotal+instTotal);
+  document.getElementById('spent-val').textContent=fmtShort(txnOuts+subsTotal+instTotal+savingsTotal);
   document.getElementById('budget-val').textContent=fmtShort(budget);
   const outCount=filtered.filter(t=>t.type==='out').length;
   document.getElementById('txn-count').textContent=outCount+' transaç'+(outCount===1?'ão':'ões');
@@ -556,20 +574,22 @@ function render(){
   document.getElementById('donut-center-val').textContent=fmtShort(totalCommitted);
   document.getElementById('donut-center-label').textContent='comprometido';
 
-  renderDonut(filtered,totalCommitted,subsTotal,instTotal);
+  renderDonut(filtered,totalCommitted,subsTotal,instTotal,savingsTotal);
   renderTxnList('txn-preview',[...filtered].reverse().slice(0,5));
   renderTxnList('txn-all',[...filtered].reverse());
-  renderContas(filtered,subsTotal,instTotal);
+  renderContas(filtered,subsTotal,instTotal,savingsTotal);
   renderInst();
+  renderSavings();
   renderSubs();
 }
 
-function renderDonut(filtered,total,subsTotal,instTotal=0){
+function renderDonut(filtered,total,subsTotal,instTotal=0,savingsTotal=0){
   const catMap={};CATS.forEach(c=>catMap[c.name]=0);
   filtered.filter(t=>t.type==='out').forEach(t=>{catMap[t.category]!==undefined?catMap[t.category]+=t.amount:catMap['Outros']+=t.amount;});
   filtered.filter(t=>t.type==='save').forEach(t=>{catMap['Economia']+=t.amount;});
   catMap['Assinaturas']+=subsTotal;
   catMap['Parcelas']=(catMap['Parcelas']||0)+instTotal;
+  catMap['Economia']=(catMap['Economia']||0)+savingsTotal;
   const entries=CATS.filter(c=>catMap[c.name]>0).map(c=>({...c,val:catMap[c.name],pct:total>0?catMap[c.name]/total:0}));
   const svg=document.getElementById('donut-svg');svg.innerHTML='';
   const cx=100,cy=100,R=88,ri=62,tau=Math.PI*2;
@@ -651,10 +671,10 @@ function renderTxnList(id,txns){
   });
 }
 
-function renderContas(filtered,subsTotal,instTotal=0){
+function renderContas(filtered,subsTotal,instTotal=0,savingsTotal=0){
   const ins=filtered.filter(t=>t.type==='in').reduce((a,t)=>a+t.amount,0);
   const outs=filtered.filter(t=>t.type==='out').reduce((a,t)=>a+t.amount,0)+subsTotal+instTotal;
-  const saved=filtered.filter(t=>t.type==='save').reduce((a,t)=>a+t.amount,0);
+  const saved=filtered.filter(t=>t.type==='save').reduce((a,t)=>a+t.amount,0)+savingsTotal;
   const saldo=ins-outs-saved;
   document.getElementById('balances').innerHTML=`
     <div class="bal-card"><div class="bal-label">Entradas</div><div class="bal-val" style="color:#3d8c62">${fmt(ins)}</div></div>
@@ -663,6 +683,34 @@ function renderContas(filtered,subsTotal,instTotal=0){
   const ecoCard=document.getElementById('eco-card');
   if(saved>0){document.getElementById('eco-val').textContent=fmt(saved);ecoCard.style.display='flex';}
   else ecoCard.style.display='none';
+}
+
+function getSavingsTotal(){
+  return savings.reduce((a,s)=>a+s.value,0);
+}
+
+function renderSavings(){
+  const el=document.getElementById('savings-list');
+  if(!el)return;
+  el.innerHTML='';
+  if(!savings.length){
+    el.innerHTML='<div class="empty">Nenhuma economia recorrente</div>';
+    document.getElementById('savings-note').textContent='';
+    return;
+  }
+  savings.forEach((s,i)=>{
+    const d=document.createElement('div');d.className='eco-rec-item';
+    d.innerHTML=`<div class="eco-rec-icon">🏦</div><div class="eco-rec-info"><div class="eco-rec-name">${s.name}</div><div class="eco-rec-val">${fmt(s.value)}/mês · guardado automaticamente</div></div><button class="sub-del" data-i="${i}">×</button>`;
+    el.appendChild(d);
+  });
+  el.querySelectorAll('.sub-del').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      savings.splice(parseInt(btn.dataset.i),1);
+      await saveToFirebase();render();
+    });
+  });
+  const total=savings.reduce((a,s)=>a+s.value,0);
+  document.getElementById('savings-note').textContent=`Total guardado automaticamente: ${fmt(total)}/mês`;
 }
 
 function getInstTotal(){
@@ -675,17 +723,27 @@ function getInstTotal(){
 }
 
 function getInstCurrentParcel(inst){
-  // calcula qual parcela deve aparecer neste mês
-  // começa na parcela atual informada + meses avançados desde o cadastro
-  const cadastroMonth=inst.startMonth; // mês do cadastro (0-11)
+  const cadastroMonth=inst.startMonth;
   const cadastroYear=inst.startYear;
   const diffMonths=(curYear-cadastroYear)*12+(curMonth-cadastroMonth);
-  // quantas parcelas já foram pagas antes deste mês
   let paidBefore=0;
   for(let m=0;m<diffMonths;m++){
     const d=new Date(cadastroYear,cadastroMonth+m,1);
     const k=`${d.getFullYear()}-${d.getMonth()}`;
     if(inst.paidMonths && inst.paidMonths[k]) paidBefore++;
+  }
+  // contar também adiantamentos feitos antes deste mês
+  if(inst.paidMonths){
+    Object.keys(inst.paidMonths).forEach(k=>{
+      if(k.startsWith('adv-')){
+        const parcelN=parseInt(k.replace('adv-',''));
+        const paidInMonth=inst.paidMonths[k]; // "2026-3"
+        const [py,pm]=paidInMonth.split('-').map(Number);
+        const paidDiff=(py-cadastroYear)*12+(pm-cadastroMonth);
+        const curDiff=diffMonths;
+        if(paidDiff<curDiff) paidBefore++;
+      }
+    });
   }
   return inst.currentParcel+paidBefore;
 }
@@ -749,6 +807,33 @@ function renderInst(){
         }
       }
       await saveToFirebase();render();
+    });
+  });
+
+  // botões adiantar
+  el.querySelectorAll('.inst-advance-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const i=parseInt(btn.dataset.i);
+      const inst=installments[i];
+      const parcelN=getInstCurrentParcel(inst);
+      const remaining=inst.total-parcelN;
+      // preencher select com opções
+      const sel=document.getElementById('advance-qty-input');
+      sel.innerHTML='';
+      for(let q=1;q<=remaining;q++){
+        const opt=document.createElement('option');
+        opt.value=q;opt.textContent=q===1?`1 parcela (${fmt(inst.value)})`:`${q} parcelas (${fmt(inst.value*q)})`;
+        sel.appendChild(opt);
+      }
+      document.getElementById('advance-modal-title').textContent=`Adiantar — ${inst.name}`;
+      document.getElementById('advance-info').textContent=`Parcela atual: ${parcelN}/${inst.total} · Valor: ${fmt(inst.value)}`;
+      document.getElementById('advance-total-preview').textContent=`Total a ser lançado neste mês: ${fmt(inst.value)}`;
+      sel.onchange=()=>{
+        const q=parseInt(sel.value);
+        document.getElementById('advance-total-preview').textContent=`Total a ser lançado neste mês: ${fmt(inst.value*q)}`;
+      };
+      document.getElementById('advance-modal').dataset.instIdx=i;
+      document.getElementById('advance-modal').style.display='flex';
     });
   });
 
@@ -899,7 +984,81 @@ document.getElementById('btn-save-inst').addEventListener('click',async()=>{
   document.getElementById('inst-modal').style.display='none';
   switchTab('parcelas');
 });
+
+// ---- ADIANTAR PARCELA ----
+document.getElementById('btn-cancel-advance').addEventListener('click',()=>{document.getElementById('advance-modal').style.display='none';});
+document.getElementById('btn-save-advance').addEventListener('click',async()=>{
+  const i=parseInt(document.getElementById('advance-modal').dataset.instIdx);
+  const inst=installments[i];
+  const qty=parseInt(document.getElementById('advance-qty-input').value);
+  if(!inst||isNaN(qty)||qty<1)return;
+  if(!inst.paidMonths)inst.paidMonths={};
+  const parcelN=getInstCurrentParcel(inst);
+  // marcar parcela atual como paga neste mês
+  const key=`${curYear}-${curMonth}`;
+  inst.paidMonths[key]='paid';
+  // marcar adiantamentos (parcelas futuras pagas agora)
+  for(let q=1;q<qty;q++){
+    const targetParcel=parcelN+q;
+    inst.paidMonths[`adv-${targetParcel}`]=`${curYear}-${curMonth}`;
+  }
+  // verificar se quitou tudo
+  const newParcel=parcelN+qty-1;
+  if(newParcel>=inst.total){
+    await saveToFirebase();render();
+    document.getElementById('advance-modal').style.display='none';
+    return;
+  }
+  await saveToFirebase();render();
+  document.getElementById('advance-modal').style.display='none';
+});
+
+// ---- ECONOMIA RECORRENTE ----
+document.getElementById('btn-add-saving').addEventListener('click',()=>{
+  document.getElementById('saving-name-input').value='';
+  document.getElementById('saving-value-input').value='';
+  document.getElementById('saving-modal').style.display='flex';
+});
+document.getElementById('btn-cancel-saving').addEventListener('click',()=>{document.getElementById('saving-modal').style.display='none';});
+document.getElementById('btn-save-saving').addEventListener('click',async()=>{
+  const name=document.getElementById('saving-name-input').value.trim();
+  const value=parseFloat(document.getElementById('saving-value-input').value);
+  if(!name||isNaN(value)||value<=0)return;
+  savings.push({name,value});
+  await saveToFirebase();render();
+  document.getElementById('saving-modal').style.display='none';
+});
 </script>
+<!-- Modal: adiantar parcela -->
+<div class="overlay overlay-center" id="advance-modal" style="display:none">
+  <div class="modal-center">
+    <h3 id="advance-modal-title">Adiantar parcelas</h3>
+    <div style="font-size:13px;color:var(--text-muted)" id="advance-info"></div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <label style="font-size:12px;color:var(--text-muted)">Quantas parcelas adiantar?</label>
+      <select id="advance-qty-input" style="width:100%;padding:12px;border:0.5px solid var(--border);border-radius:10px;font-size:16px;background:var(--g-bg);color:var(--text)"></select>
+    </div>
+    <div style="background:var(--pill-bg);border-radius:10px;padding:10px 12px;font-size:13px" id="advance-total-preview"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" id="btn-cancel-advance">Cancelar</button>
+      <button class="btn-save" id="btn-save-advance">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: economia recorrente -->
+<div class="overlay overlay-center" id="saving-modal" style="display:none">
+  <div class="modal-center">
+    <h3>Nova economia recorrente</h3>
+    <input type="text" id="saving-name-input" placeholder="Nome (ex: Reserva de emergência)" autocomplete="off">
+    <input type="number" id="saving-value-input" placeholder="Valor mensal (R$)" step="0.01" min="0" inputmode="decimal">
+    <div class="modal-btns">
+      <button class="btn-cancel" id="btn-cancel-saving">Cancelar</button>
+      <button class="btn-save" id="btn-save-saving">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: nova parcela -->
 <div class="overlay overlay-center" id="inst-modal" style="display:none">
   <div class="modal-center">
