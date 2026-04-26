@@ -647,13 +647,15 @@ function hideSeg(total){
   document.getElementById('donut-tooltip').classList.remove('show');
 }
 
-function renderTxnList(id,txns){
+const txnShowAll={};
+function renderTxnList(id,txns,limit=5){
   const el=document.getElementById(id);el.innerHTML='';
   if(!txns.length){el.innerHTML='<div class="empty">Nenhuma transação neste mês</div>';return;}
-  txns.forEach(t=>{
+  const showAll=txnShowAll[id]||false;
+  const visible=showAll?txns:txns.slice(0,limit);
+  visible.forEach(t=>{
     const cat=t.type==='save'?CATS.find(c=>c.name==='Economia'):CATS.find(c=>c.name===t.category)||CATS[CATS.length-1];
     const prefix=t.type==='out'?'−':t.type==='save'?'🏦 ':'+';
-    // índice real no array global
     const realIdx=transactions.indexOf(t);
     const d=document.createElement('div');d.className='txn';
     d.innerHTML=`<div class="txn-icon">${cat.icon}</div><div class="txn-info"><div class="txn-name">${t.name}</div><div class="txn-sub">${t.type==='save'?'Economia':t.category} · ${new Date(t.date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</div></div><div class="txn-amt ${t.type}">${prefix}${fmt(t.amount)}</div><button class="txn-del" data-i="${realIdx}" title="Excluir">×</button>`;
@@ -664,11 +666,18 @@ function renderTxnList(id,txns){
       const i=parseInt(btn.dataset.i);
       if(confirm(`Excluir "${transactions[i]?.name}"?`)){
         transactions.splice(i,1);
-        await saveToFirebase();
-        render();
+        await saveToFirebase();render();
       }
     });
   });
+  // botão ver mais / ver menos
+  if(txns.length>limit){
+    const btn=document.createElement('div');
+    btn.style.cssText='text-align:center;padding:.6rem 0 .2rem;cursor:pointer;color:#3d8c62;font-size:12px;font-weight:500';
+    btn.textContent=showAll?'▲ Ver menos':'▼ Ver mais ('+( txns.length-limit)+' restantes)';
+    btn.addEventListener('click',()=>{txnShowAll[id]=!showAll;renderTxnList(id,txns,limit);});
+    el.appendChild(btn);
+  }
 }
 
 function renderContas(filtered,subsTotal,instTotal=0,savingsTotal=0){
