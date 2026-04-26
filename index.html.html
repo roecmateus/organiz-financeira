@@ -780,6 +780,8 @@ function renderInst(){
     if(isPaid){paidCount++;totalPaid+=inst.value;}
     else totalPending+=inst.value;
 
+    const remaining=inst.total-parcelNum;
+    const advBtn=remaining>0?`<button class="inst-advance-btn" data-i="${i}">+Adiantar</button>`:'';
     const d=document.createElement('div');
     d.className='inst-item';
     d.innerHTML=`
@@ -791,6 +793,7 @@ function renderInst(){
         <div class="inst-sub">parcela ${parcelNum}/${inst.total}</div>
       </div>
       <div class="inst-amt ${isPaid?'paid-amt':'pending-amt'}">${fmt(inst.value)}</div>
+      ${advBtn}
       <button class="inst-del" data-i="${i}">×</button>`;
     el.appendChild(d);
   });
