@@ -704,8 +704,10 @@ function renderInst(){
 
   installments.forEach((inst,i)=>{
     const parcelNum=getInstCurrentParcel(inst);
-    // se já passou da última parcela, não mostrar
-    if(parcelNum>inst.total) return;
+    const key2=`${curYear}-${curMonth}`;
+    const isPaidThisMonth=inst.paidMonths && inst.paidMonths[key2];
+    // se já passou da última parcela E não foi paga neste mês, não mostrar
+    if(parcelNum>inst.total && !isPaidThisMonth) return;
 
     const isPaid=inst.paidMonths && inst.paidMonths[key];
     const isAdvanced=isPaid && inst.paidMonths[key]==='advanced';
@@ -741,10 +743,8 @@ function renderInst(){
         const parcelNum=getInstCurrentParcel(inst);
         const isAdv=(curYear>inst.startYear)||(curYear===inst.startYear&&curMonth>inst.startMonth);
         inst.paidMonths[key2]=isAdv?'advanced':'paid';
-        // se chegou na última parcela, remover após salvar
+        // se chegou na última parcela, apenas salva — some automaticamente no mês seguinte
         if(parcelNum>=inst.total){
-          await new Promise(r=>setTimeout(r,300));
-          installments.splice(i,1);
           await saveToFirebase();render();return;
         }
       }
